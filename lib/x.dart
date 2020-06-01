@@ -32,6 +32,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ?.toList();
 
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Sensors Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -39,6 +40,9 @@ class _MyHomePageState extends State<MyHomePage> {
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Sensor Example'),
+          actions: <Widget>[
+
+          ],
         ),
         body: Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
