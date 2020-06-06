@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 import 'package:sensors/sensors.dart';
 import 'dart:typed_data';
@@ -18,6 +19,8 @@ Future<Uint8List> getBytesFromAsset(String path, int width) async {
       .buffer
       .asUint8List();
 }
+
+Settings settings = new Settings(true, 10);
 
 class MapPage extends StatefulWidget {
   MapPage({Key key}) : super(key: key);
@@ -55,9 +58,7 @@ class _MapPageState extends State<MapPage> {
       List.generate(2, (_) => new List(3), growable: false);
   List<List<double>> accValues =
       List.generate(2, (_) => new List(3), growable: false);
-  int gyroCount = 0, accCount = 0, maxSensorCount = 10;
-  bool _trackDevice = true;
-
+  int gyroCount = 0, accCount = 0;
 
   //Variable for Isolate
   ReceivePort receivePort = ReceivePort();
@@ -96,13 +97,13 @@ class _MapPageState extends State<MapPage> {
         }
         gyroCount++;
 
-        if (gyroCount >= maxSensorCount) {
+        if (gyroCount >= settings.maxSensorCount) {
           sendPort.send([
             'gyro',
             [
-              gyroValues[1][0] - gyroValues[0][0],
-              gyroValues[1][1] - gyroValues[0][1],
-              gyroValues[1][2] - gyroValues[0][2]
+              double.parse((gyroValues[1][0] - gyroValues[0][0]).toStringAsFixed(2)),
+              double.parse((gyroValues[1][1] - gyroValues[0][1]).toStringAsFixed(2)),
+              double.parse((gyroValues[1][2] - gyroValues[0][2]).toStringAsFixed(2))
             ]
           ]);
 
@@ -128,13 +129,13 @@ class _MapPageState extends State<MapPage> {
         }
         accCount++;
 
-        if (accCount >= maxSensorCount) {
+        if (accCount >= settings.maxSensorCount) {
           sendPort.send([
             'acc',
             [
-              accValues[1][0] - accValues[0][0],
-              accValues[1][1] - accValues[0][1],
-              accValues[1][2] - accValues[0][2]
+              double.parse((accValues[1][0] - accValues[0][0]).toStringAsFixed(2)),
+              double.parse((accValues[1][1] - accValues[0][1]).toStringAsFixed(2)),
+              double.parse((accValues[1][2] - accValues[0][2]).toStringAsFixed(2))
             ]
           ]);
 
@@ -154,9 +155,24 @@ class _MapPageState extends State<MapPage> {
   static isolateEntry(SendPort sendPort) async {
     ReceivePort receivePort = ReceivePort();
     sendPort.send(receivePort.sendPort);
+    bool gyro=false, acc=false;
+    Packet packet = new Packet(); 
 
     receivePort.listen((message) {
       // print(message.toString());
+
+      if(message[0] == 'gyro') {packet.gyro = message[1]; gyro = true;}
+      else if(message[0] == 'acc') {packet.acc = message[1]; acc = true;}
+
+      if(gyro&&acc == true){
+        gyro =false;
+        acc = false;
+        // print("Packet");
+        print(jsonEncode(packet));
+
+        //Send Packet to server
+      }
+
     });
   }
 
@@ -178,14 +194,11 @@ class _MapPageState extends State<MapPage> {
           anchor: Offset(0.5, 0.5)));
   }
 
-  void _showSnackBar(String str){
-    scaffoldKey.currentState.showSnackBar(
-      SnackBar(
-        content: Text(str),
-        duration: Duration(seconds: 1),
-
-      )
-    );
+  void _showSnackBar(String str) {
+    scaffoldKey.currentState.showSnackBar(SnackBar(
+      content: Text(str),
+      duration: Duration(seconds: 1),
+    ));
   }
 
   //Code to initialize the map
@@ -200,130 +213,206 @@ class _MapPageState extends State<MapPage> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Flutter Demo',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-        ),
-        home: Scaffold(
-          key: scaffoldKey,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            title: Text("Traffic App"),
-            actions: <Widget>[
+    return Scaffold(
+      key: scaffoldKey,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Text("Traffic App"),
+      ),
+      drawer: SettingsPage(trackDevice),
+      body: Stack(
+        children: <Widget>[
+          GoogleMap(
+            onMapCreated: _onMapCreated,
+            markers: _markers,
+            initialCameraPosition: CameraPosition(
+              target: _center,
+              zoom: _zoom,
+            ),
+            myLocationButtonEnabled: true,
+            myLocationEnabled: true,
+            zoomControlsEnabled: false,
+            onCameraIdle: () {
+              setState(() {
+                mapController.getZoomLevel().then((value) {
+                  _zoom = value;
+                  setCustomMapPin();
+                  updateMarkers();
+                  sendPort.send("markers updated");
+                  print(_zoom);
+                });
+              });
+            },
+          ),
+          Column(
+            children: <Widget>[
+              Expanded(child: Container()),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 48),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    MaterialButton(
+                        height: 50,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(25),
+                          topLeft: Radius.circular(25),
+                        )),
+                        color: Colors.white,
+                        child: Icon(
+                          Icons.directions_car,
+                          size: (mapType == "vehicle") ? 32 : 24,
+                          color: (mapType == "vehicle")
+                              ? Colors.blue
+                              : Colors.grey,
+                        ),
+                        onPressed: () {
+                          _showSnackBar("Vehicle Traffic Map");
+                          setState(() {
+                            mapType = "vehicle";
+                          });
+                        }),
+                    MaterialButton(
+                        height: 50,
+                        color: Colors.white,
+                        child: Icon(
+                          Icons.directions_walk,
+                          size: (mapType == "pedestrian") ? 32 : 24,
+                          color: (mapType == "pedestrian")
+                              ? Colors.green
+                              : Colors.grey,
+                        ),
+                        onPressed: () {
+                          _showSnackBar("Pedestrian Traffic Map");
+                          setState(() {
+                            mapType = "pedestrian";
+                          });
+                        }),
+                    MaterialButton(
+                        height: 50,
+                        color: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                          bottomRight: Radius.circular(25),
+                          topRight: Radius.circular(25),
+                        )),
+                        child: Icon(
+                          Icons.traffic,
+                          size: (mapType == "road") ? 32 : 24,
+                          color: (mapType == "road") ? Colors.red : Colors.grey,
+                        ),
+                        onPressed: () {
+                          _showSnackBar("Road Quality Map");
+                          setState(() {
+                            mapType = "road";
+                          });
+                        }),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class Settings {
+  bool trackDevice;
+  int maxSensorCount;
+
+  Settings(this.trackDevice, this.maxSensorCount);
+
+  void switchTrack() {
+    trackDevice = !trackDevice;
+  }
+}
+
+
+class Packet{
+  List<double> gyro = new List(3);
+  List<double> acc = new List(3);
+
+  Map<String, dynamic> toJson() => 
+  {
+    'gyro': gyro,
+    'acc' : acc,
+  };
+
+}
+
+class SettingsPage extends StatefulWidget {
+  final Function trackDevice;
+  SettingsPage(this.trackDevice);
+
+  @override
+  _SettingsPageState createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  double sliderVal = 2;
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Text("Settings"),
+      ),
+      backgroundColor: Colors.black,
+      body: Padding(
+        padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 24),
+        child: ListView(
+          children: <Widget>[
+            Row(children: [
+              Text(
+                "Track user data",
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+              Expanded(child: Container()),
               Switch(
-                // activeColor: Colors.green,
                 inactiveThumbColor: Colors.white,
                 inactiveTrackColor: Colors.grey,
-                value: _trackDevice,
-                onChanged: (value){
-                  setState((){
-                    _trackDevice = !_trackDevice;
+                value: settings.trackDevice,
+                onChanged: (value) {
+                  setState(() {
+                    settings.switchTrack();
+                    widget.trackDevice(settings.trackDevice);
                   });
-                  _showSnackBar(_trackDevice?"Tracking turned ON":"Tracking turned OFF");
                 },
               )
-            ],
-          ),
-          body: Stack(
-            children: <Widget>[
-              GoogleMap(
-                onMapCreated: _onMapCreated,
-                markers: _markers,
-                initialCameraPosition: CameraPosition(
-                  target: _center,
-                  zoom: _zoom,
+            ]),
+            SizedBox(
+              height: 18.0,
+            ),
+            Row(
+              children: <Widget>[
+                Text(
+                  "Accuracy",
+                  style: TextStyle(color: Colors.white, fontSize: 18),
                 ),
-                myLocationButtonEnabled: true,
-                myLocationEnabled: true,
-                zoomControlsEnabled: false,
-                onCameraIdle: () {
-                  setState(() {
-                    mapController.getZoomLevel().then((value) {
-                      _zoom = value;
-                      setCustomMapPin();
-                      updateMarkers();
-                      sendPort.send("markers updated");
-                      print(_zoom);
+                Expanded(child: Container()),
+                Slider(
+                  max: 2,
+                  min: 0,
+                  divisions: 2,
+                  value: sliderVal,
+                  onChanged: (val) {
+                    setState(() {
+                      sliderVal = val;
+                      settings.maxSensorCount = 10 + (2 - val.toInt()) * 10;
                     });
-                  });
-                },
-              ),
-              Column(
-                children: <Widget>[
-                  Expanded(child: Container()),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 48),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        MaterialButton(
-                            height: 50,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.only(
-                              bottomLeft: Radius.circular(25),
-                              topLeft: Radius.circular(25),
-                            )),
-                            color: Colors.white,
-                            child: Icon(
-                              Icons.directions_car,
-                              size: (mapType == "vehicle") ? 36 : 24,
-                              color: (mapType == "vehicle")
-                                  ? Colors.blue
-                                  : Colors.grey,
-                            ),
-                            onPressed: () {
-                              _showSnackBar("Vehicle Traffic Map");
-                              setState(() {
-                                mapType = "vehicle";
-                              });
-                            }),
-                        MaterialButton(
-                            height: 50,
-                            color: Colors.white,
-                            child: Icon(
-                              Icons.directions_walk,
-                              size: (mapType == "pedestrian") ? 36 : 24,
-                              color: (mapType == "pedestrian")
-                                  ? Colors.green
-                                  : Colors.grey,
-                            ),
-                            onPressed: () {
-                              _showSnackBar("Pedestrian Traffic Map");
-                              setState(() {
-                                mapType = "pedestrian";
-                              });
-                            }),
-                        MaterialButton(
-                            height: 50,
-                            color: Colors.white,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.only(
-                              bottomRight: Radius.circular(25),
-                              topRight: Radius.circular(25),
-                            )),
-                            child: Icon(
-                              Icons.traffic,
-                              size: (mapType == "road") ? 36 : 24,
-                              color: (mapType == "road")
-                                  ? Colors.red
-                                  : Colors.grey,
-                            ),
-                            onPressed: () {
-                              _showSnackBar("Road Quality Map");
-                              setState(() {
-                                mapType = "road";
-                              });
-                            }),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ));
+                  },
+                  label: (sliderVal == 0)
+                      ? "Low"
+                      : (sliderVal == 1) ? "Medium" : "High",
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
