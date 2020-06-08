@@ -7,18 +7,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+// import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
+// import 'package:http/http.dart' as http;
 import 'dart:ui' as ui;
 // import 'package:geolocator/geolocator.dart';
-
-Future<Uint8List> getBytesFromAsset(String path, int width) async {
-  ByteData data = await rootBundle.load(path);
-  ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(),
-      targetWidth: width);
-  ui.FrameInfo fi = await codec.getNextFrame();
-  return (await fi.image.toByteData(format: ui.ImageByteFormat.png))
-      .buffer
-      .asUint8List();
-}
 
 Settings settings = new Settings(true, 10);
 
@@ -68,7 +62,7 @@ class _MapPageState extends State<MapPage> {
   void initState() {
     super.initState();
 
-    setCustomMapPin();
+    setCustomMapPin('vehicle');
 
     loadIsolate();
   }
@@ -101,13 +95,26 @@ class _MapPageState extends State<MapPage> {
           sendPort.send([
             'gyro',
             [
-              double.parse((gyroValues[1][0] - gyroValues[0][0]).toStringAsFixed(2)),
-              double.parse((gyroValues[1][1] - gyroValues[0][1]).toStringAsFixed(2)),
-              double.parse((gyroValues[1][2] - gyroValues[0][2]).toStringAsFixed(2))
+              double.parse(
+                  (gyroValues[1][0] - gyroValues[0][0]).toStringAsFixed(2)),
+              double.parse(
+                  (gyroValues[1][1] - gyroValues[0][1]).toStringAsFixed(2)),
+              double.parse(
+                  (gyroValues[1][2] - gyroValues[0][2]).toStringAsFixed(2))
             ]
           ]);
 
           gyroCount = 0;
+
+          Geolocator()
+              .getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
+              .then((value) {
+            // print(value);
+            sendPort.send([
+              'loc',
+              [value.latitude, value.longitude]
+            ]);
+          });
         }
       });
       _streamSubscriptions[1] = userAccelerometerEvents.listen((event) {
@@ -133,9 +140,12 @@ class _MapPageState extends State<MapPage> {
           sendPort.send([
             'acc',
             [
-              double.parse((accValues[1][0] - accValues[0][0]).toStringAsFixed(2)),
-              double.parse((accValues[1][1] - accValues[0][1]).toStringAsFixed(2)),
-              double.parse((accValues[1][2] - accValues[0][2]).toStringAsFixed(2))
+              double.parse(
+                  (accValues[1][0] - accValues[0][0]).toStringAsFixed(2)),
+              double.parse(
+                  (accValues[1][1] - accValues[0][1]).toStringAsFixed(2)),
+              double.parse(
+                  (accValues[1][2] - accValues[0][2]).toStringAsFixed(2))
             ]
           ]);
 
@@ -150,41 +160,76 @@ class _MapPageState extends State<MapPage> {
     sendPort = await receivePort.first;
 
     trackDevice(true);
+
+    receivePort.listen((message) {
+      setState(() {
+        markerLocations = message[mapType];
+      });
+     });
   }
 
   static isolateEntry(SendPort sendPort) async {
     ReceivePort receivePort = ReceivePort();
     sendPort.send(receivePort.sendPort);
-    bool gyro=false, acc=false;
-    Packet packet = new Packet(); 
+    bool gyro = false, acc = false, pos = false;
+    Packet packet = new Packet('test');
+    // final channel = IOWebSocketChannel.connect('ws://192.168.0.1:8080');
 
     receivePort.listen((message) {
       // print(message.toString());
 
-      if(message[0] == 'gyro') {packet.gyro = message[1]; gyro = true;}
-      else if(message[0] == 'acc') {packet.acc = message[1]; acc = true;}
+      if (message[0] == 'gyro') {
+        packet.gyro = message[1];
+        gyro = true;
+      } else if (message[0] == 'acc') {
+        packet.acc = message[1];
+        acc = true;
+      } else if (message[0] == 'loc') {
+        packet.loc = message[1];
+        pos = true;
+      }
 
-      if(gyro&&acc == true){
-        gyro =false;
+      if (gyro && acc && pos == true) {
+        gyro = false;
         acc = false;
-        // print("Packet");
+        pos = false;
+
         print(jsonEncode(packet));
 
         //Send Packet to server
-      }
+        // http.post('192.168.0.1:8080 ',
+        // headers: <String, String>{
+        //   'Content-Type': 'application/json; charset=UTF-8',
+        // },
+        // body: jsonEncode(packet));
 
+        // channel.sink.add(jsonEncode(packet));
+      }
     });
+
+    // channel.stream.listen((event) {
+    //   sendPort.send(event);
+    // });
+  }
+
+  Future<Uint8List> getBytesFromAsset(String path, int width) async {
+    ByteData data = await rootBundle.load(path);
+    ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(),
+        targetWidth: width);
+    ui.FrameInfo fi = await codec.getNextFrame();
+    return (await fi.image.toByteData(format: ui.ImageByteFormat.png))
+        .buffer
+        .asUint8List();
   }
 
   //Load custom Marker from assets, set size here
-  void setCustomMapPin() async {
-    Uint8List markerImage = await getBytesFromAsset('assets/squaregradblue.png',
+  void setCustomMapPin(String name) async {
+    Uint8List markerImage = await getBytesFromAsset('assets/' + name + '.png',
         _zoom < 10 ? 40 : 40 + (pow((_zoom - 10) * 4, 1.2)).toInt());
     markerIcon = BitmapDescriptor.fromBytes(markerImage);
-    print('recalculated');
+    // print('recalculated');
   }
 
-  //
   void updateMarkers() {
     for (int i = 0; i < markerLocations.length; i++)
       _markers.add(Marker(
@@ -236,7 +281,7 @@ class _MapPageState extends State<MapPage> {
               setState(() {
                 mapController.getZoomLevel().then((value) {
                   _zoom = value;
-                  setCustomMapPin();
+                  setCustomMapPin(mapType);
                   updateMarkers();
                   sendPort.send("markers updated");
                   print(_zoom);
@@ -271,6 +316,7 @@ class _MapPageState extends State<MapPage> {
                           _showSnackBar("Vehicle Traffic Map");
                           setState(() {
                             mapType = "vehicle";
+                            setCustomMapPin(mapType);
                           });
                         }),
                     MaterialButton(
@@ -286,7 +332,9 @@ class _MapPageState extends State<MapPage> {
                         onPressed: () {
                           _showSnackBar("Pedestrian Traffic Map");
                           setState(() {
+                            
                             mapType = "pedestrian";
+                            setCustomMapPin(mapType);
                           });
                         }),
                     MaterialButton(
@@ -306,6 +354,7 @@ class _MapPageState extends State<MapPage> {
                           _showSnackBar("Road Quality Map");
                           setState(() {
                             mapType = "road";
+                            setCustomMapPin(mapType);
                           });
                         }),
                   ],
@@ -330,17 +379,20 @@ class Settings {
   }
 }
 
-
-class Packet{
+class Packet {
+  String name;
   List<double> gyro = new List(3);
   List<double> acc = new List(3);
+  List<double> loc = new List(2);
 
-  Map<String, dynamic> toJson() => 
-  {
-    'gyro': gyro,
-    'acc' : acc,
-  };
+  Packet(this.name);
 
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'gyro': gyro,
+        'acc': acc,
+        'loc': loc,
+      };
 }
 
 class SettingsPage extends StatefulWidget {
@@ -401,7 +453,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   onChanged: (val) {
                     setState(() {
                       sliderVal = val;
-                      settings.maxSensorCount = 10 + (2 - val.toInt()) * 10;
+                      settings.maxSensorCount = 10 + (2 - val.toInt()) * 12;
                     });
                   },
                   label: (sliderVal == 0)
