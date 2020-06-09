@@ -7,14 +7,15 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 // import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:web_socket_channel/io.dart';
+// import 'package:web_socket_channel/io.dart';
 // import 'package:http/http.dart' as http;
 import 'dart:ui' as ui;
-// import 'package:geolocator/geolocator.dart';
+import './infoPage.dart';
 
-Settings settings = new Settings(true, 10);
+Settings settings = new Settings(true,false, 10);
 
 class MapPage extends StatefulWidget {
   MapPage({Key key}) : super(key: key);
@@ -27,21 +28,21 @@ class _MapPageState extends State<MapPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   String mapType = "vehicle";
   BitmapDescriptor markerIcon;
-  List markerLocations = [
-    [10.017560, 76.348831],
-    [10.017660, 76.348571],
-    [10.017610, 76.349001],
-    [10.017610, 76.349050],
-    [10.017915, 76.349197],
-    [10.017935, 76.349297],
-    [10.017935, 76.349347],
-    [10.017955, 76.349497],
-    [10.018067, 76.350797],
-    [10.018067, 76.350897],
-    [10.018067, 76.350997],
-    [10.018067, 76.350497],
-    [10.017164, 76.347274],
-    [10.017164, 76.347274]
+  List<LatLng> markerLocations = [
+    LatLng(10.017560, 76.348831),
+    LatLng(10.017660, 76.348571),
+    LatLng(10.017610, 76.349001),
+    LatLng(10.017610, 76.349050),
+    LatLng(10.017915, 76.349197),
+    LatLng(10.017935, 76.349297),
+    LatLng(10.017935, 76.349347),
+    LatLng(10.017955, 76.349497),
+    LatLng(10.018067, 76.350797),
+    LatLng(10.018067, 76.350897),
+    LatLng(10.018067, 76.350997),
+    LatLng(10.018067, 76.350497),
+    LatLng(10.017164, 76.347274),
+    LatLng(10.017164, 76.347274)
   ];
   Set<Marker> _markers = {};
   double _zoom = 16.0;
@@ -63,9 +64,11 @@ class _MapPageState extends State<MapPage> {
     super.initState();
 
     setCustomMapPin('vehicle');
-
+    getUname().then((value) => settings.uname = value);
     loadIsolate();
   }
+
+ 
 
   void trackDevice(bool track) {
     if (track == false)
@@ -158,21 +161,22 @@ class _MapPageState extends State<MapPage> {
   Future loadIsolate() async {
     await Isolate.spawn(isolateEntry, receivePort.sendPort);
     sendPort = await receivePort.first;
+    // receivePort.close();
 
     trackDevice(true);
 
-    receivePort.listen((message) {
-      setState(() {
-        markerLocations = message[mapType];
-      });
-     });
+    // receivePort.listen((message) {
+    //   setState(() {
+    //     markerLocations = message[mapType];
+    //   });
+    //  });
   }
 
   static isolateEntry(SendPort sendPort) async {
     ReceivePort receivePort = ReceivePort();
     sendPort.send(receivePort.sendPort);
     bool gyro = false, acc = false, pos = false;
-    Packet packet = new Packet('test');
+    Packet packet = new Packet();
     // final channel = IOWebSocketChannel.connect('ws://192.168.0.1:8080');
 
     receivePort.listen((message) {
@@ -234,7 +238,7 @@ class _MapPageState extends State<MapPage> {
     for (int i = 0; i < markerLocations.length; i++)
       _markers.add(Marker(
           markerId: MarkerId(i.toString()),
-          position: LatLng(markerLocations[i][0], markerLocations[i][1]),
+          position: markerLocations[i],
           icon: markerIcon,
           anchor: Offset(0.5, 0.5)));
   }
@@ -263,6 +267,16 @@ class _MapPageState extends State<MapPage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: Text("Traffic App"),
+        actions: <Widget>[
+          IconButton(
+            icon: Icon(Icons.info_outline, color: Colors.white,), 
+            onPressed: (){
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => InfoPage()),
+              );
+            })
+        ],
       ),
       drawer: SettingsPage(trackDevice),
       body: Stack(
@@ -270,6 +284,16 @@ class _MapPageState extends State<MapPage> {
           GoogleMap(
             onMapCreated: _onMapCreated,
             markers: _markers,
+            polylines: [
+              Polyline(points: markerLocations,
+              polylineId: PolylineId('route'),
+              color: Colors.green,
+              width: 5,
+              visible: settings.showRoute
+              
+              ),
+              
+              ].toSet(),
             initialCameraPosition: CameraPosition(
               target: _center,
               zoom: _zoom,
@@ -332,7 +356,6 @@ class _MapPageState extends State<MapPage> {
                         onPressed: () {
                           _showSnackBar("Pedestrian Traffic Map");
                           setState(() {
-                            
                             mapType = "pedestrian";
                             setCustomMapPin(mapType);
                           });
@@ -368,14 +391,25 @@ class _MapPageState extends State<MapPage> {
   }
 }
 
+Future<String> getUname() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  return prefs.getString('username');
+}
+
 class Settings {
-  bool trackDevice;
+  String uname;
+  bool trackDevice, showRoute;
   int maxSensorCount;
 
-  Settings(this.trackDevice, this.maxSensorCount);
+  // Settings(this.trackDevice, this.maxSensorCount);
+  Settings(this.trackDevice,this.showRoute,this.maxSensorCount);
 
   void switchTrack() {
     trackDevice = !trackDevice;
+  }
+
+  void switchRoute(){
+    showRoute = !showRoute;
   }
 }
 
@@ -385,7 +419,9 @@ class Packet {
   List<double> acc = new List(3);
   List<double> loc = new List(2);
 
-  Packet(this.name);
+  Packet(){
+    this.name = settings.uname;
+  }
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -412,10 +448,10 @@ class _SettingsPageState extends State<SettingsPage> {
         backgroundColor: Colors.black,
         title: Text("Settings"),
       ),
-      backgroundColor: Colors.black,
+      backgroundColor: Color.fromARGB(255, 20, 20, 20),
       body: Padding(
         padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 24),
-        child: ListView(
+        child: Column(
           children: <Widget>[
             Row(children: [
               Text(
@@ -431,6 +467,26 @@ class _SettingsPageState extends State<SettingsPage> {
                   setState(() {
                     settings.switchTrack();
                     widget.trackDevice(settings.trackDevice);
+                  });
+                },
+              )
+            ]),
+            SizedBox(
+              height: 18.0,
+            ),
+            Row(children: [
+              Text(
+                "Show route",
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+              Expanded(child: Container()),
+              Switch(
+                inactiveThumbColor: Colors.white,
+                inactiveTrackColor: Colors.grey,
+                value: settings.showRoute,
+                onChanged: (value) {
+                  setState(() {
+                    settings.switchRoute();
                   });
                 },
               )
@@ -461,6 +517,27 @@ class _SettingsPageState extends State<SettingsPage> {
                       : (sliderVal == 1) ? "Medium" : "High",
                 ),
               ],
+            ),
+            SizedBox(
+              height: 50,
+            ),
+            MaterialButton(
+              onPressed: () async {
+                SharedPreferences prefs = await SharedPreferences.getInstance();
+                prefs.setBool('isLoggedIn', false);
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              shape: StadiumBorder(),
+              color: Colors.blue,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                    top: 8, bottom: 10, left: 24, right: 24),
+                child: Text(
+                  "Logout",
+                  style: TextStyle(fontSize: 20, color: Colors.white),
+                ),
+              ),
             ),
           ],
         ),

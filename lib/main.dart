@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
-import './mapPage.dart';
+import 'package:flutter/services.dart';
+import 'loginPage.dart';
 
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+  systemNavigationBarColor: Colors.black, // navigation bar color
+  statusBarColor: Colors.black, // status bar color
+));
+
   runApp(MyApp());
 }
 
@@ -17,7 +24,7 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: MapPage()
+        home: LoginPage()
     );
   }
 }
