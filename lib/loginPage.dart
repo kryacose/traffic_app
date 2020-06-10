@@ -88,6 +88,7 @@ class _LoginPageState extends State<LoginPage> {
                 onPressed: () async {
                   SharedPreferences prefs =
                       await SharedPreferences.getInstance();
+                  if(uname == null || uname =='') uname = 'test';
                   prefs.setString('username', uname);
                   prefs.setBool('isLoggedIn', true);
                   Navigator.push(

@@ -15,7 +15,7 @@ import 'package:geolocator/geolocator.dart';
 import 'dart:ui' as ui;
 import './infoPage.dart';
 
-Settings settings = new Settings(true,false, 10);
+Settings settings = new Settings(true, false, 10);
 
 class MapPage extends StatefulWidget {
   MapPage({Key key}) : super(key: key);
@@ -48,7 +48,7 @@ class _MapPageState extends State<MapPage> {
   double _zoom = 16.0;
 
   //Variables for the sensor data and shit
-  List<StreamSubscription<dynamic>> _streamSubscriptions = new List(2);
+  List<StreamSubscription<dynamic>> _streamSubscriptions = new List(3);
   List<List<double>> gyroValues =
       List.generate(2, (_) => new List(3), growable: false);
   List<List<double>> accValues =
@@ -67,8 +67,6 @@ class _MapPageState extends State<MapPage> {
     getUname().then((value) => settings.uname = value);
     loadIsolate();
   }
-
- 
 
   void trackDevice(bool track) {
     if (track == false)
@@ -109,15 +107,15 @@ class _MapPageState extends State<MapPage> {
 
           gyroCount = 0;
 
-          Geolocator()
-              .getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
-              .then((value) {
-            // print(value);
-            sendPort.send([
-              'loc',
-              [value.latitude, value.longitude]
-            ]);
-          });
+          // Geolocator()
+          //     .getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
+          //     .then((value) {
+          //   // print(value);
+          //   sendPort.send([
+          //     'loc',
+          //     [value.latitude, value.longitude]
+          //   ]);
+          // });
         }
       });
       _streamSubscriptions[1] = userAccelerometerEvents.listen((event) {
@@ -155,6 +153,15 @@ class _MapPageState extends State<MapPage> {
           accCount = 0;
         }
       });
+
+      _streamSubscriptions[2] = Geolocator()
+          .getPositionStream(LocationOptions(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5
+          ))
+          .listen((position) {
+            sendPort.send(['position', position]);
+          });
     }
   }
 
@@ -188,8 +195,11 @@ class _MapPageState extends State<MapPage> {
       } else if (message[0] == 'acc') {
         packet.acc = message[1];
         acc = true;
-      } else if (message[0] == 'loc') {
-        packet.loc = message[1];
+      } else if (message[0] == 'position') {
+        packet.latlng = [message[1].latitude, message[1].longitude];
+        packet.speed = message[1].speed;
+        packet.heading = message[1].heading;
+        packet.timestamp = message[1].timestamp.toIso8601String();
         pos = true;
       }
 
@@ -269,13 +279,16 @@ class _MapPageState extends State<MapPage> {
         title: Text("Traffic App"),
         actions: <Widget>[
           IconButton(
-            icon: Icon(Icons.info_outline, color: Colors.white,), 
-            onPressed: (){
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => InfoPage()),
-              );
-            })
+              icon: Icon(
+                Icons.info_outline,
+                color: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => InfoPage()),
+                );
+              })
         ],
       ),
       drawer: SettingsPage(trackDevice),
@@ -285,15 +298,13 @@ class _MapPageState extends State<MapPage> {
             onMapCreated: _onMapCreated,
             markers: _markers,
             polylines: [
-              Polyline(points: markerLocations,
-              polylineId: PolylineId('route'),
-              color: Colors.green,
-              width: 5,
-              visible: settings.showRoute
-              
-              ),
-              
-              ].toSet(),
+              Polyline(
+                  points: markerLocations,
+                  polylineId: PolylineId('route'),
+                  color: Colors.green,
+                  width: 5,
+                  visible: settings.showRoute),
+            ].toSet(),
             initialCameraPosition: CameraPosition(
               target: _center,
               zoom: _zoom,
@@ -402,13 +413,13 @@ class Settings {
   int maxSensorCount;
 
   // Settings(this.trackDevice, this.maxSensorCount);
-  Settings(this.trackDevice,this.showRoute,this.maxSensorCount);
+  Settings(this.trackDevice, this.showRoute, this.maxSensorCount);
 
   void switchTrack() {
     trackDevice = !trackDevice;
   }
 
-  void switchRoute(){
+  void switchRoute() {
     showRoute = !showRoute;
   }
 }
@@ -417,9 +428,11 @@ class Packet {
   String name;
   List<double> gyro = new List(3);
   List<double> acc = new List(3);
-  List<double> loc = new List(2);
+  List<double> latlng = new List(2);
+  double speed, heading;
+  String timestamp;
 
-  Packet(){
+  Packet() {
     this.name = settings.uname;
   }
 
@@ -427,7 +440,10 @@ class Packet {
         'name': name,
         'gyro': gyro,
         'acc': acc,
-        'loc': loc,
+        'latlng': latlng,
+        'speed' : speed,
+        'heading' : heading,
+        'timestamp' : timestamp,
       };
 }
 
