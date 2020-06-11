@@ -28,7 +28,10 @@ class _MapPageState extends State<MapPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   String mapType = "vehicle";
   BitmapDescriptor markerIcon;
-  List<LatLng> markerLocations = [
+
+  List<LatLng> markerLocations;
+
+  List<LatLng> vehiclePoints = [
     LatLng(10.017560, 76.348831),
     LatLng(10.017660, 76.348571),
     LatLng(10.017610, 76.349001),
@@ -44,6 +47,78 @@ class _MapPageState extends State<MapPage> {
     LatLng(10.017164, 76.347274),
     LatLng(10.017164, 76.347274)
   ];
+
+  List<LatLng> pedestrianPoints = [
+    LatLng(10.017728, 76.348873),
+    LatLng(10.017728, 76.348873),
+    LatLng(10.017632, 76.348505),
+    LatLng(10.017632, 76.348505),
+    LatLng(10.017688, 76.348766),
+    LatLng(10.017796, 76.349440),
+    LatLng(10.017796, 76.349440),
+    LatLng(10.017861, 76.349338),
+    LatLng(10.017759, 76.349231),
+    LatLng(10.017833, 76.349271),
+    LatLng(10.017833, 76.349271),
+    LatLng(10.017581, 76.349924),
+    LatLng(10.017658, 76.349959),
+    LatLng(10.017658, 76.349959),
+    LatLng(10.017702, 76.350351),
+    LatLng(10.017537, 76.349542),
+    LatLng(10.017516, 76.349345),
+  ];
+
+  List<LatLng> roadQPoints = [
+    LatLng(10.017803, 76.348886),
+    LatLng(10.017843, 76.348936),
+    LatLng(10.017803, 76.348886),
+    LatLng(10.018104, 76.349712),
+    LatLng(10.018086, 76.349603),
+    LatLng(10.018046, 76.349489),
+    LatLng(10.018046, 76.349489),
+    LatLng(10.018027, 76.349582),
+    LatLng(10.018044, 76.349679),
+    LatLng(10.017857, 76.350377),
+    LatLng(10.017857, 76.350377),
+    LatLng(10.017843, 76.350514),
+    LatLng(10.017787, 76.350581),
+    LatLng(10.017901, 76.350189),
+    LatLng(10.017901, 76.350189),
+    LatLng(10.017943, 76.350455),
+  ];
+
+  List<LatLng> routePoints = [
+    LatLng(10.017169, 76.347179),
+    LatLng(10.017263, 76.347571),
+    LatLng(10.017451, 76.348180),
+    LatLng(10.017525, 76.348546),
+    LatLng(10.017583, 76.348863),
+    LatLng(10.017694, 76.349292),
+    LatLng(10.017781, 76.349649),
+    LatLng(10.017864, 76.350019),
+    LatLng(10.017922, 76.350153),
+    LatLng(10.017948, 76.350276),
+    LatLng(10.017991, 76.350507),
+    LatLng(10.018049, 76.350861),
+    LatLng(10.018152, 76.351293),
+    LatLng(10.018144, 76.351609),
+    LatLng(10.018403, 76.351963),
+    LatLng(10.018651, 76.352328),
+    LatLng(10.018939, 76.352647),
+    LatLng(10.018939, 76.352647),
+    LatLng(10.019678, 76.353090),
+    LatLng(10.019945, 76.353103),
+    LatLng(10.020151, 76.353047),
+    LatLng(10.020497, 76.352876),
+    LatLng(10.020944, 76.352772),
+    LatLng(10.020987, 76.352910),
+    LatLng(10.020840, 76.353215),
+    LatLng(10.020718, 76.353496),
+    LatLng(10.021106, 76.353703),
+  ];
+
+
+
   Set<Marker> _markers = {};
   double _zoom = 16.0;
 
@@ -62,10 +137,18 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
-
+    getUname();
     setCustomMapPin('vehicle');
-    getUname().then((value) => settings.uname = value);
+    markerLocations = vehiclePoints;
     loadIsolate();
+  }
+
+  @override
+  void dispose(){
+    super.dispose();
+    for (StreamSubscription<dynamic> subscription in _streamSubscriptions) {
+      subscription.cancel();
+    }
   }
 
   void trackDevice(bool track) {
@@ -106,16 +189,6 @@ class _MapPageState extends State<MapPage> {
           ]);
 
           gyroCount = 0;
-
-          // Geolocator()
-          //     .getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
-          //     .then((value) {
-          //   // print(value);
-          //   sendPort.send([
-          //     'loc',
-          //     [value.latitude, value.longitude]
-          //   ]);
-          // });
         }
       });
       _streamSubscriptions[1] = userAccelerometerEvents.listen((event) {
@@ -157,7 +230,7 @@ class _MapPageState extends State<MapPage> {
       _streamSubscriptions[2] = Geolocator()
           .getPositionStream(LocationOptions(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 5
+            // distanceFilter: 5
           ))
           .listen((position) {
             sendPort.send(['position', position]);
@@ -171,6 +244,7 @@ class _MapPageState extends State<MapPage> {
     // receivePort.close();
 
     trackDevice(true);
+    sendPort.send(['name',settings.uname]);
 
     // receivePort.listen((message) {
     //   setState(() {
@@ -201,6 +275,8 @@ class _MapPageState extends State<MapPage> {
         packet.heading = message[1].heading;
         packet.timestamp = message[1].timestamp.toIso8601String();
         pos = true;
+      } else if(message[0] == 'name'){
+        packet.name = message[1];
       }
 
       if (gyro && acc && pos == true) {
@@ -245,6 +321,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   void updateMarkers() {
+    _markers = {};
     for (int i = 0; i < markerLocations.length; i++)
       _markers.add(Marker(
           markerId: MarkerId(i.toString()),
@@ -299,7 +376,7 @@ class _MapPageState extends State<MapPage> {
             markers: _markers,
             polylines: [
               Polyline(
-                  points: markerLocations,
+                  points: routePoints,
                   polylineId: PolylineId('route'),
                   color: Colors.green,
                   width: 5,
@@ -318,8 +395,6 @@ class _MapPageState extends State<MapPage> {
                   _zoom = value;
                   setCustomMapPin(mapType);
                   updateMarkers();
-                  sendPort.send("markers updated");
-                  print(_zoom);
                 });
               });
             },
@@ -351,7 +426,9 @@ class _MapPageState extends State<MapPage> {
                           _showSnackBar("Vehicle Traffic Map");
                           setState(() {
                             mapType = "vehicle";
+                            markerLocations = vehiclePoints;
                             setCustomMapPin(mapType);
+                            updateMarkers();
                           });
                         }),
                     MaterialButton(
@@ -368,7 +445,9 @@ class _MapPageState extends State<MapPage> {
                           _showSnackBar("Pedestrian Traffic Map");
                           setState(() {
                             mapType = "pedestrian";
+                            markerLocations = pedestrianPoints;
                             setCustomMapPin(mapType);
+                            updateMarkers();
                           });
                         }),
                     MaterialButton(
@@ -388,7 +467,9 @@ class _MapPageState extends State<MapPage> {
                           _showSnackBar("Road Quality Map");
                           setState(() {
                             mapType = "road";
+                            markerLocations = roadQPoints;
                             setCustomMapPin(mapType);
+                            updateMarkers();
                           });
                         }),
                   ],
@@ -402,9 +483,13 @@ class _MapPageState extends State<MapPage> {
   }
 }
 
-Future<String> getUname() async {
+void getUname() async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
-  return prefs.getString('username');
+  // print("\n\nUSERNAME: " + settings.uname+"\n\n");
+  String str = prefs.getString('username');
+  settings.uname = str;
+  print("\n\nUSERNAME: $str\n\n");
+  // SendPort.send(['uname', settings.uname]);
 }
 
 class Settings {
@@ -414,6 +499,10 @@ class Settings {
 
   // Settings(this.trackDevice, this.maxSensorCount);
   Settings(this.trackDevice, this.showRoute, this.maxSensorCount);
+
+  void setUname(String str){
+    this.uname = str;
+  }
 
   void switchTrack() {
     trackDevice = !trackDevice;
@@ -432,9 +521,7 @@ class Packet {
   double speed, heading;
   String timestamp;
 
-  Packet() {
-    this.name = settings.uname;
-  }
+  
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -541,6 +628,7 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () async {
                 SharedPreferences prefs = await SharedPreferences.getInstance();
                 prefs.setBool('isLoggedIn', false);
+                dispose();
                 Navigator.pop(context);
                 Navigator.pop(context);
               },

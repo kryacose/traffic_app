@@ -41,6 +41,12 @@ dev_dependencies:
   http: ^0.12.1
   web_socket_channel: ^1.1.0
   shared_preferences: ^0.5.7+3
+  flutter_launcher_icons: ^0.7.5
+  url_launcher: ^5.4.10
+
+flutter_icons:
+  image_path: 'assets/icon.png'
+  android: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
